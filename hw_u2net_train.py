@@ -25,6 +25,8 @@ from hw_data_loader import MogizDataset
 from model import U2NET
 from model import U2NETP
 
+from torch.utils.mobile_optimizer import optimize_for_mobile
+
 # ------- 1. define loss function --------
 
 bce_loss = nn.BCELoss(size_average=True)
@@ -46,6 +48,12 @@ def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, labels_v):
 
     return loss0, loss
 
+
+def prepare_save(model):
+    torchscript_model = torch.jit.script(model)
+
+    torchscript_model_optimized = optimize_for_mobile(torchscript_model)
+    torch.jit.save(torchscript_model_optimized,"mobile_model.pt")
 
 # ------- 2. set the directory of training dataset --------
 
@@ -134,7 +142,7 @@ for epoch in range(0, epoch_num):
         optimizer.zero_grad()
 
         # forward + backward + optimize
-        d0, d1, d2, d3, d4, d5, d6 = net(inputs_v)
+        d0, d1, d2, d3, d4, d5, d6, height = net(inputs_v)
         loss2, loss = muti_bce_loss_fusion(
             d0, d1, d2, d3, d4, d5, d6, labels_v)
 
@@ -156,6 +164,7 @@ for epoch in range(0, epoch_num):
 
             torch.save(net.state_dict(), model_dir + model_name+"_bce_itr_%d_train_%3f_tar_%3f.pth" %
                        (ite_num, running_loss / ite_num4val, running_tar_loss / ite_num4val))
+            prepare_save(net.state_dict())
             running_loss = 0.0
             running_tar_loss = 0.0
             net.train()  # resume train

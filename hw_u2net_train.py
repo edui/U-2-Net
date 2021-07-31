@@ -13,6 +13,7 @@ import torchvision.transforms as standard_transforms
 import numpy as np
 import glob
 import os
+from datetime import datetime
 
 from hw_data_loader import Rescale
 from hw_data_loader import RescaleT
@@ -65,13 +66,13 @@ train_num = 0
 val_num = 0
 save_frq = 2000  # save the model every 2000 iterations
 save_frq = 500  # save the model every 2000 iterations
-
+l_rate = 0.001
 
 mydataset = MogizDataset(
     ds_dir=data_dir,
     ds_name=ds_name,
     transform=transforms.Compose([
-        # RescaleT(320),
+        RescaleT(320),
         # RandomCrop(288),
         ToTensorLab(flag=0)]))
 obj_dataloader = DataLoader(
@@ -95,7 +96,7 @@ if torch.cuda.is_available():
 
 # ------- 4. define optimizer --------
 print("---define optimizer...")
-optimizer = optim.Adam(net.parameters(), lr=0.001, betas=(
+optimizer = optim.Adam(net.parameters(), lr=l_rate, betas=(
     0.9, 0.999), eps=1e-08, weight_decay=0)
 
 # ------- 5. training process --------
@@ -105,9 +106,13 @@ running_loss = 0.0
 running_tar_loss = 0.0
 ite_num4val = 0
 
+t_l = []
+t_acc = []
+
 for epoch in range(0, epoch_num):
     net.train()
 
+    loss_epoch = 0
     for i, data in enumerate(obj_dataloader):
         ite_num = ite_num + 1
         ite_num4val = ite_num4val + 1
@@ -139,6 +144,7 @@ for epoch in range(0, epoch_num):
         # # print statistics
         running_loss += loss.data.item()
         running_tar_loss += loss2.data.item()
+        loss_epoch = running_loss
 
         # del temporary outputs and loss
         del d0, d1, d2, d3, d4, d5, d6, loss2, loss
@@ -154,3 +160,21 @@ for epoch in range(0, epoch_num):
             running_tar_loss = 0.0
             net.train()  # resume train
             ite_num4val = 0
+    t_l.append((loss_epoch / train_num))
+
+MODEL_SETTINGS = {
+    'epoch': epoch_num,
+    'learning_rate': l_rate,
+    'batch_size': batch_size_train,
+    'dataset': mydataset
+}
+
+SAVE_DIR = 'IMOGIZ_MODEL_' + datetime.now().strftime("%d%m%Y_%H%M%S") + '/'
+LOG_DIR = 'logs/' + SAVE_DIR
+try:
+    os.makedirs(LOG_DIR)
+    np.save(LOG_DIR + 'model_settings.npy', MODEL_SETTINGS)
+except:
+    print("Error ! Model exists.")
+
+np.save(LOG_DIR + 't_loss', np.array(t_l))

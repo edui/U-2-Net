@@ -72,8 +72,9 @@ def main():
     # 1. dataloader
     test_salobj_dataset = SalObjDataset(img_name_list=img_name_list,
                                         lbl_name_list=[],
-                                        transform=transforms.Compose([RescaleT(320),
-                                                                      ToTensorLab(flag=0)])
+                                        transform=transforms.Compose([
+                                            # RescaleT(320),
+                                            ToTensorLab(flag=0)])
                                         )
     test_salobj_dataloader = DataLoader(test_salobj_dataset,
                                         batch_size=1,

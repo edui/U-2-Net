@@ -18,7 +18,8 @@ from data_loader import ToTensor
 from data_loader import ToTensorLab
 from data_loader import SalObjDataset
 
-from model import U2NET  # full size version 173.6 MB
+from model import U2NET_mogiz  # full size version 173.6 MB
+from model import U2NETP_mogiz_lite  # lite size version 4.7 MB
 
 # normalize the predicted SOD probability map
 
@@ -57,7 +58,7 @@ def save_output(image_name, pred, d_dir):
 def main():
 
     # --------- 1. get image path and name ---------
-    model_name = 'u2net'
+    model_name = 'u2netp'
 
     image_dir = os.path.join(os.getcwd(), 'test_data', 'test_human_images')
     prediction_dir = os.path.join(
@@ -83,8 +84,11 @@ def main():
 
     # --------- 3. model define ---------
     if(model_name == 'u2net'):
-        print("...load U2NET---173.6 MB")
-        net = U2NET(3, 1)
+        print("...load U2NET mogiz ---173.6 MB")
+        net = U2NET_mogiz(3, 1)
+    else:
+        print("...load U2NET mogiz lite ---4.7 MB")
+        net = U2NET_mogiz_lite(3, 1)
 
     if torch.cuda.is_available():
         net.load_state_dict(torch.load(model_dir))
@@ -96,7 +100,8 @@ def main():
     # --------- 4. inference for each image ---------
     for i_test, data_test in enumerate(test_salobj_dataloader):
 
-        print("inferencing:", img_name_list[i_test].split(os.sep)[-1])
+        selected_image_name = img_name_list[i_test].split(os.sep)[-1]
+        print("inferencing:", selected_image_name)
 
         inputs_test = data_test['image']
         inputs_test = inputs_test.type(torch.FloatTensor)
@@ -106,18 +111,30 @@ def main():
         else:
             inputs_test = Variable(inputs_test)
 
-        d1, d2, d3, d4, d5, d6, d7 = net(inputs_test)
+        d1, d2, d3, d4, d5, d6, d7, height_o = net(inputs_test)
 
         # normalization
         pred = d1[:, 0, :, :]
         pred = normPRED(pred)
+        pred_height = torch.argmax(height_o, 1)
 
         # save results to test_results folder
         if not os.path.exists(prediction_dir):
             os.makedirs(prediction_dir, exist_ok=True)
         save_output(img_name_list[i_test], pred, prediction_dir)
 
-        del d1, d2, d3, d4, d5, d6, d7
+        fformat = '.png'
+        if '.jpg' in selected_image_name:
+            fformat = '.jpg'
+        elif '.jpeg' in selected_image_name:
+            fformat = '.jpeg'
+
+        with open(prediction_dir + selected_image_name.replace(fformat, '.info.txt'), 'w') as out_file:
+            out_file.write("Image: " + selected_image_name)
+            out_file.write("\nHeight: {:.1f} cm\nWeight: {:.1f} kg".format(
+                100*pred_height.item(), 100*pred_height.item()))
+
+        del d1, d2, d3, d4, d5, d6, d7, height_o
 
 
 if __name__ == "__main__":

@@ -22,17 +22,20 @@ from hw_data_loader import ToTensor
 from hw_data_loader import ToTensorLab
 from hw_data_loader import MogizDataset
 
-from model import U2NET
-from model import U2NETP
+from model import U2NET_mogiz
+from model import U2NETP_mogiz_lite
 
 from torch.utils.mobile_optimizer import optimize_for_mobile
 
 # ------- 1. define loss function --------
 
 bce_loss = nn.BCELoss(size_average=True)
+height_loss = nn.MSELoss()
+#height_loss = nn.L1Loss()
+#height_loss = nn.SmoothL1Loss()
 
 
-def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, labels_v):
+def multi_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, labels_v):
 
     loss0 = bce_loss(d0, labels_v)
     loss1 = bce_loss(d1, labels_v)
@@ -49,15 +52,19 @@ def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, labels_v):
     return loss0, loss
 
 
-def prepare_save(model):
-    torchscript_model = torch.jit.script(model)
+def save_model(model, filename):
+    # normal
+    torch.save(model.state_dict(), filename+".pth")
 
+    # for mobile
+    torchscript_model = torch.jit.script(model)
     torchscript_model_optimized = optimize_for_mobile(torchscript_model)
-    torch.jit.save(torchscript_model_optimized,"mobile_model.pt")
+    torch.jit.save(torchscript_model_optimized, filename + ".pt")
 
 # ------- 2. set the directory of training dataset --------
 
-model_name = 'u2net'  # 'u2netp'
+
+model_name = 'u2netp'  # 'u2netp'
 
 #data_dir = os.path.join(os.getcwd(), 'train_data' + os.sep)
 #tra_image_dir = os.path.join('DUTS', 'DUTS-TR', 'DUTS-TR', 'im_aug' + os.sep)
@@ -75,6 +82,7 @@ val_num = 0
 save_frq = 2000  # save the model every 2000 iterations
 save_frq = 500  # save the model every 2000 iterations
 l_rate = 0.001
+w3_loss = 1
 
 mydataset = MogizDataset(
     ds_dir=data_dir,
@@ -95,9 +103,9 @@ print("---")
 # ------- 3. define model --------
 # define the net
 if(model_name == 'u2net'):
-    net = U2NET(3, 1)
+    net = U2NET_mogiz(3, 1)
 elif(model_name == 'u2netp'):
-    net = U2NETP(3, 1)
+    net = U2NETP_mogiz_lite(3, 1)
 
 if torch.cuda.is_available():
     net.cuda()
@@ -114,21 +122,24 @@ running_loss = 0.0
 running_tar_loss = 0.0
 ite_num4val = 0
 
-t_l = []
-t_acc = []
+t_trainloss = []
+t_tarloss = []
+t_hloss = []
+t_totalloss = []
 
 for epoch in range(0, epoch_num):
     net.train()
 
-    loss_epoch = 0
     for i, data in enumerate(obj_dataloader):
         ite_num = ite_num + 1
         ite_num4val = ite_num4val + 1
 
         inputs, labels = data['image'], data['label']
+        y_height = data['height']
 
         inputs = inputs.type(torch.FloatTensor)
         labels = labels.type(torch.FloatTensor)
+        y_height = y_height.type(torch.FloatTensor)
 
         # wrap them in Variable
         if torch.cuda.is_available():
@@ -142,8 +153,8 @@ for epoch in range(0, epoch_num):
         optimizer.zero_grad()
 
         # forward + backward + optimize
-        d0, d1, d2, d3, d4, d5, d6, height = net(inputs_v)
-        loss2, loss = muti_bce_loss_fusion(
+        d0, d1, d2, d3, d4, d5, d6, height_o = net(inputs_v)
+        loss2, loss = multi_bce_loss_fusion(
             d0, d1, d2, d3, d4, d5, d6, labels_v)
 
         loss.backward()
@@ -152,24 +163,30 @@ for epoch in range(0, epoch_num):
         # # print statistics
         running_loss += loss.data.item()
         running_tar_loss += loss2.data.item()
-        loss_epoch = running_loss
+        loss_h = w3_loss * height_loss(height_o, y_height)
 
         # del temporary outputs and loss
         del d0, d1, d2, d3, d4, d5, d6, loss2, loss
 
-        print("[epoch: %3d/%3d, batch: %5d/%5d, ite: %d] train loss: %3f, tar: %3f " % (
-            epoch + 1, epoch_num, (i + 1) * batch_size_train, train_num, ite_num, running_loss / ite_num4val, running_tar_loss / ite_num4val))
+        train_loss = running_loss / ite_num4val
+        tar_loss = running_tar_loss / ite_num4val
+        total_loss = train_loss + loss_h
+        print("[epoch: %3d/%3d, batch: %5d/%5d, ite: %d] train loss: %3f, tar: %3f , height loss : %3f, total loss : %3f" % (
+            epoch + 1, epoch_num, (i + 1) * batch_size_train, train_num, ite_num, train_loss, tar_loss, loss_h, total_loss))
+
+        t_trainloss.append(train_loss)
+        t_tarloss.append(tar_loss)
+        t_hloss.append(loss_h)
+        t_totalloss.append(total_loss)
 
         if ite_num % save_frq == 0:
-
-            torch.save(net.state_dict(), model_dir + model_name+"_bce_itr_%d_train_%3f_tar_%3f.pth" %
-                       (ite_num, running_loss / ite_num4val, running_tar_loss / ite_num4val))
-            prepare_save(net.state_dict())
+            save_model(net, model_dir + model_name+"_bce_itr_%d_train_%3f_tar_%3f" %
+                       (ite_num, train_loss, tar_loss))
             running_loss = 0.0
             running_tar_loss = 0.0
+            loss_h = 0.0
             net.train()  # resume train
             ite_num4val = 0
-    t_l.append((loss_epoch / train_num))
 
 MODEL_SETTINGS = {
     'epoch': epoch_num,
@@ -186,4 +203,9 @@ try:
 except:
     print("Error ! Model exists.")
 
-np.save(LOG_DIR + 't_loss', np.array(t_l))
+np.save(LOG_DIR + 't_train_loss', np.array(t_trainloss))
+np.save(LOG_DIR + 't_tar_loss', np.array(t_tarloss))
+np.save(LOG_DIR + 't_height_loss', np.array(t_hloss))
+np.save(LOG_DIR + 't_total_loss', np.array(t_totalloss))
+
+del t_trainloss, t_tarloss, t_hloss, t_totalloss

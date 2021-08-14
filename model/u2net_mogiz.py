@@ -340,16 +340,17 @@ class FinalBlock(nn.Module):
         )
 
         self.height_2 = nn.Sequential(
-            nn.Linear(pool_size*pool_size*h_channel, 1024),  # 1024
+            nn.Linear(h_channel, 128),  # 1024
             nn.Dropout(0.15),  # 0.15
             nn.ReLU(),
-            nn.Linear(1024, 1)  # 1024
+            nn.Linear(128, 1)  # 1024
         )
         self.softMax = torch.nn.Softmax(1)
 
     def forward(self, x):
 
-        mask = self.softMax(self.mask_out(x))
+        #mask = self.softMax(self.mask_out(x))
+        mask = self.mask_out(x)
         #joint = self.joint_out(x)
 
         height = F.adaptive_avg_pool2d(x, (self.pool_size, self.pool_size))
@@ -364,7 +365,7 @@ class FinalBlock(nn.Module):
 class U2NET_mogiz(nn.Module):
 
     def __init__(self, in_ch=3, out_ch=1):
-        super(U2NET, self).__init__()
+        super(U2NET_mogiz, self).__init__()
 
         self.stage1 = RSU7(in_ch, 32, 64)
         self.pool12 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
@@ -465,15 +466,15 @@ class U2NET_mogiz(nn.Module):
         d0, height = self.conv_out(torch.cat((d1, d2, d3, d4, d5, d6), 1))
 
         # return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6)
-        return d0, F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height
+        return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height
 
 ### U^2-Net small ###
 
 
-class U2NET_mogiz_lite(nn.Module):
+class U2NET_lite_mogiz(nn.Module):
 
     def __init__(self, in_ch=3, out_ch=1):
-        super(U2NETP, self).__init__()
+        super(U2NET_lite_mogiz, self).__init__()
 
         self.stage1 = RSU7(in_ch, 16, 64)
         self.pool12 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
@@ -572,7 +573,6 @@ class U2NET_mogiz_lite(nn.Module):
 
         #d0 = self.outconv(torch.cat((d1, d2, d3, d4, d5, d6), 1))
         d0, height = self.conv_out(torch.cat((d1, d2, d3, d4, d5, d6), 1))
-        height = 0
 
         # return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height
-        return d0, F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height
+        return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height

@@ -23,7 +23,7 @@ from hw_data_loader import ToTensorLab
 from hw_data_loader import MogizDataset
 
 from model import U2NET_mogiz
-from model import U2NETP_mogiz_lite
+from model import U2NET_lite_mogiz
 
 from torch.utils.mobile_optimizer import optimize_for_mobile
 
@@ -31,8 +31,8 @@ from torch.utils.mobile_optimizer import optimize_for_mobile
 
 bce_loss = nn.BCELoss(size_average=True)
 height_loss = nn.MSELoss()
-#height_loss = nn.L1Loss()
-#height_loss = nn.SmoothL1Loss()
+# height_loss = nn.L1Loss()
+# height_loss = nn.SmoothL1Loss()
 
 
 def multi_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, labels_v):
@@ -66,9 +66,9 @@ def save_model(model, filename):
 
 model_name = 'u2netp'  # 'u2netp'
 
-#data_dir = os.path.join(os.getcwd(), 'train_data' + os.sep)
-#tra_image_dir = os.path.join('DUTS', 'DUTS-TR', 'DUTS-TR', 'im_aug' + os.sep)
-#tra_label_dir = os.path.join('DUTS', 'DUTS-TR', 'DUTS-TR', 'gt_aug' + os.sep)
+# data_dir = os.path.join(os.getcwd(), 'train_data' + os.sep)
+# tra_image_dir = os.path.join('DUTS', 'DUTS-TR', 'DUTS-TR', 'im_aug' + os.sep)
+# tra_label_dir = os.path.join('DUTS', 'DUTS-TR', 'DUTS-TR', 'gt_aug' + os.sep)
 data_dir = "/content/drive/MyDrive/Research/mogiz/Dataset/resized_128/"
 ds_name = "TRAINING.csv"
 model_dir = os.path.join(os.getcwd(), 'saved_models', model_name + os.sep)
@@ -105,7 +105,7 @@ print("---")
 if(model_name == 'u2net'):
     net = U2NET_mogiz(3, 1)
 elif(model_name == 'u2netp'):
-    net = U2NETP_mogiz_lite(3, 1)
+    net = U2NET_lite_mogiz(3, 1)
 
 if torch.cuda.is_available():
     net.cuda()
@@ -143,17 +143,19 @@ for epoch in range(0, epoch_num):
 
         # wrap them in Variable
         if torch.cuda.is_available():
-            inputs_v, labels_v = Variable(inputs.cuda(), requires_grad=False), Variable(labels.cuda(),
-                                                                                        requires_grad=False)
+            inputs_v, labels_v = Variable(inputs.cuda(), requires_grad=False), Variable(
+                labels.cuda(), requires_grad=False)
+            heights_v = Variable(y_height.cuda(), requires_grad=False)
         else:
             inputs_v, labels_v = Variable(inputs, requires_grad=False), Variable(
                 labels, requires_grad=False)
+            heights_v = Variable(y_height, requires_grad=False)
 
         # y zero the parameter gradients
         optimizer.zero_grad()
 
         # forward + backward + optimize
-        d0, d1, d2, d3, d4, d5, d6, height_o = net(inputs_v)
+        pred, height_o, d0, d1, d2, d3, d4, d5, d6 = net(inputs_v)
         loss2, loss = multi_bce_loss_fusion(
             d0, d1, d2, d3, d4, d5, d6, labels_v)
 
@@ -163,10 +165,10 @@ for epoch in range(0, epoch_num):
         # # print statistics
         running_loss += loss.data.item()
         running_tar_loss += loss2.data.item()
-        loss_h = w3_loss * height_loss(height_o, y_height)
+        loss_h = w3_loss * height_loss(height_o, heights_v)
 
         # del temporary outputs and loss
-        del d0, d1, d2, d3, d4, d5, d6, loss2, loss
+        del pred, d0, d1, d2, d3, d4, d5, d6, loss2, loss
 
         train_loss = running_loss / ite_num4val
         tar_loss = running_tar_loss / ite_num4val

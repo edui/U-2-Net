@@ -19,7 +19,7 @@ from data_loader import ToTensorLab
 from data_loader import SalObjDataset
 
 from model import U2NET_mogiz  # full size version 173.6 MB
-from model import U2NETP_mogiz_lite  # lite size version 4.7 MB
+from model import U2NET_lite_mogiz  # lite size version 4.7 MB
 
 # normalize the predicted SOD probability map
 
@@ -88,7 +88,7 @@ def main():
         net = U2NET_mogiz(3, 1)
     else:
         print("...load U2NET mogiz lite ---4.7 MB")
-        net = U2NET_mogiz_lite(3, 1)
+        net = U2NET_lite_mogiz(3, 1)
 
     if torch.cuda.is_available():
         net.load_state_dict(torch.load(model_dir))
@@ -111,11 +111,11 @@ def main():
         else:
             inputs_test = Variable(inputs_test)
 
-        d1, d2, d3, d4, d5, d6, d7, height_o = net(inputs_test)
+        pred, height_o, d1, d2, d3, d4, d5, d6, d7 = net(inputs_test)
 
         # normalization
-        pred = d1[:, 0, :, :]
-        pred = normPRED(pred)
+        #pred = d1[:, 0, :, :]
+        #pred = normPRED(pred)
         pred_height = torch.argmax(height_o, 1)
 
         # save results to test_results folder

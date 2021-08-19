@@ -29,6 +29,15 @@ def _upsample_like(src, tar):
     return src
 
 
+def normPRED(d):
+    ma = torch.max(d)
+    mi = torch.min(d)
+
+    dn = (d-mi)/(ma-mi)
+
+    return dn
+
+
 ### RSU-7 ###
 class RSU7(nn.Module):  # UNet07DRES(nn.Module):
 
@@ -466,7 +475,10 @@ class U2NET_mogiz(nn.Module):
         d0, height = self.conv_out(torch.cat((d1, d2, d3, d4, d5, d6), 1))
 
         # return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6)
-        return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height
+        r0 = F.sigmoid(d0)
+        pred = r0[:, 0, :, :]
+        pred = normPRED(pred)
+        return pred, height, r0, F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6)
 
 ### U^2-Net small ###
 
@@ -508,7 +520,7 @@ class U2NET_lite_mogiz(nn.Module):
         self.side6 = nn.Conv2d(64, out_ch, 3, padding=1)
 
         #self.outconv = nn.Conv2d(6*out_ch, out_ch, 1)
-        self.conv_out = FinalBlock(6*out_ch, out_ch, 32, 32)
+        self.conv_out = FinalBlock(6*out_ch, out_ch, 6, 6)
 
     def forward(self, x):
 
@@ -575,4 +587,8 @@ class U2NET_lite_mogiz(nn.Module):
         d0, height = self.conv_out(torch.cat((d1, d2, d3, d4, d5, d6), 1))
 
         # return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height
-        return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6), height
+        r0 = F.sigmoid(d0)
+        pred = r0[:, 0, :, :]
+        pred = normPRED(pred)
+
+        return pred, height, r0, F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6)
